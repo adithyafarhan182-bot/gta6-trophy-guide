@@ -1,127 +1,82 @@
-// Leonida Legend — the trophy checklist: filters, search, spoiler hiding,
-// expandable per-trophy guides with their cited sources.
-const GRADE_LETTER = { platinum: 'P', gold: 'G', silver: 'S', bronze: 'B' };
-const KIND_LABEL = {
-  story: 'Story',
-  missable: 'Missable',
-  collectibles: 'Collectible',
-  activities: 'Activity',
-  side: 'Side quest',
-  robbery: 'Robbery',
-  money: 'Money',
-};
+// Detail pane: the selected trophy's guide, steps, sources and earn state.
+// Renders into #detail. Exported for app.js; also used by the roadmap chips.
 
-function sourceUrl(doc, name) {
-  const found = doc.sourceList.find((s) => s.name === name);
-  return found ? found.url : null;
+export function medalLetter(grade) {
+  return { platinum: 'P', gold: 'G', silver: 'S', bronze: 'B' }[grade] ?? '?';
 }
 
-function isHidden(trophy, state, earned) {
-  return state.spoiler && trophy.story && !earned.has(trophy.id);
+export function gradeLabel(grade) {
+  return grade.charAt(0).toUpperCase() + grade.slice(1);
 }
 
-function matchesSearch(trophy, state, earned) {
-  const q = state.query.trim().toLowerCase();
-  if (!q) return true;
-  // With spoilers on, an unrevealed story trophy must not leak through search.
-  if (isHidden(trophy, state, earned)) return false;
-  const hay = `${trophy.name} ${trophy.description} ${trophy.guide} ${trophy.target}`.toLowerCase();
-  return q.split(/\s+/).every((word) => hay.includes(word));
-}
-
-function matchesFilters(trophy, state, earned) {
-  if (state.kind === 'online') return false;
-  if (state.kind !== 'all' && !trophy.kinds.includes(state.kind)) return false;
-  if (state.grade !== 'all' && trophy.grade !== state.grade) return false;
-  if (state.earnedOnly && !earned.has(trophy.id)) return false;
-  return matchesSearch(trophy, state, earned);
-}
-
-function detailHtml(doc, trophy) {
-  const unconfirmed = trophy.guide.startsWith('UNCONFIRMED AT LAUNCH');
-  const guideText = unconfirmed ? trophy.guide.replace(/^UNCONFIRMED AT LAUNCH: /, '') : trophy.guide;
-  const links = trophy.sources.map((name) => {
-    const url = sourceUrl(doc, name);
-    return url ? `<a href="${url}" target="_blank" rel="noopener">${name}</a>` : `<span>${name}</span>`;
-  }).join('');
-  return `
-    <h3>Guide</h3>
-    ${unconfirmed ? '<p class="unconfirmed"><strong>Unconfirmed at launch.</strong> No launch guide had pinned down this trophy yet — the method below is the working lead, not a verified fact.</p>' : ''}
-    <p>${guideText}</p>
-    <h3>Sources</h3>
-    <p class="sources">${links}</p>
-    <h3>Missable?</h3>
-    <p class="${trophy.missable ? 'missable-note' : ''}">${trophy.missableNote}</p>
-    <h3>Roadmap</h3>
-    <p>Stage ${trophy.stage} of the roadmap to the platinum — see the Roadmap tab.</p>`;
-}
-
-function trophyItem(doc, trophy, state, earned, onToggle) {
-  const li = document.createElement('li');
-  li.className = `trophy${earned.has(trophy.id) ? ' earned' : ''}`;
-  const hidden = isHidden(trophy, state, earned);
-  const name = hidden ? 'Hidden story trophy' : trophy.name;
-  const desc = hidden
-    ? 'Hidden on PlayStation until earned. Tick it off to reveal it.'
-    : trophy.description;
-  const tags = trophy.kinds.map((k) => `<span class="tag">${KIND_LABEL[k] ?? k}</span>`).join('');
-  const missableTag = trophy.missable ? '<span class="tag missable">Possibly missable</span>' : '';
-  const hiddenTag = trophy.hidden ? '<span class="hidden-tag">Hidden</span>' : '';
-  const targetTag = hidden ? '' : `<span class="tag target">Target: ${trophy.target}</span>`;
-  li.innerHTML = `
-    <div class="trophy-head">
-      <button type="button" class="tick" aria-label="Mark ${trophy.name} earned" aria-pressed="${earned.has(trophy.id)}">✓</button>
-      <button type="button" class="trophy-main" aria-expanded="false">
-        <span class="trophy-name">${name}${hiddenTag}</span><br>
-        <span class="trophy-desc">${desc}</span>
-        <span class="trophy-tags">${tags}${missableTag}${targetTag}</span>
-      </button>
-      <span class="grade-dot ${trophy.grade}" title="${trophy.grade}"><span>${GRADE_LETTER[trophy.grade]}</span></span>
-    </div>
-    <div class="trophy-detail" hidden></div>`;
-  const tick = li.querySelector('.tick');
-  tick.addEventListener('click', (e) => {
-    e.stopPropagation();
-    onToggle(trophy.id);
-  });
-  const opener = li.querySelector('.trophy-main');
-  const detail = li.querySelector('.trophy-detail');
-  const openDetail = () => {
-    const open = detail.hidden;
-    detail.hidden = !open;
-    opener.setAttribute('aria-expanded', String(open));
-    if (open && !detail.dataset.filled) {
-      detail.innerHTML = hidden
-        ? '<h3>Guide</h3><p>This trophy is hidden until you earn it. Tick the box on the left once it pops to reveal its guide here.</p>'
-        : detailHtml(doc, trophy);
-      detail.dataset.filled = '1';
-    }
+export function kindLabel(kind) {
+  const labels = {
+    story: 'Story',
+    collectible: 'Collectibles',
+    activity: 'Activities',
+    challenge: 'Challenges',
+    exploration: 'Exploration',
+    money: 'Money',
+    completion: 'Completion',
   };
-  opener.addEventListener('click', openDetail);
-  if (state.openId === trophy.id) openDetail();
-  return li;
+  return labels[kind] ?? kind;
 }
 
-export function renderGuide(doc, state, earned, onToggle) {
-  const list = document.getElementById('trophyList');
-  const meta = document.getElementById('listMeta');
-  const empty = document.getElementById('emptyState');
-  const shown = doc.trophies.filter((t) => matchesFilters(t, state, earned));
-  list.replaceChildren();
-  for (const trophy of shown) {
-    list.append(trophyItem(doc, trophy, state, earned, onToggle));
+export function targetText(trophy) {
+  if (trophy.target == null) return null;
+  if (trophy.target >= 1000) return 'PSN target: ' + trophy.target.toLocaleString('en-US');
+  return 'PSN target: ' + trophy.target;
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+export function renderDetail(detailEl, trophy, data, earned, callbacks) {
+  if (!trophy) {
+    detailEl.innerHTML =
+      '<p class="detail-empty">Pick a trophy on the left to read its guide — what to do, ' +
+      'where and how, and when it can be missed, with the sources for every fact.</p>' +
+      '<p class="detail-empty">Start with the roadmap if you want the order to earn them in.</p>';
+    return;
   }
-  empty.hidden = shown.length > 0 || state.kind === 'online';
-  if (state.kind === 'online') {
-    meta.textContent = 'Online: 0 trophies. All 55 are single-player — there are no online trophies in this list (PowerPyx).';
-    empty.hidden = true;
-  } else {
-    const bits = [`Showing ${shown.length} of ${doc.trophies.length} trophies`];
-    if (state.kind !== 'all') bits.push(`kind: ${state.kind}`);
-    if (state.grade !== 'all') bits.push(`grade: ${state.grade}`);
-    if (state.query.trim()) bits.push(`search: “${state.query.trim()}”`);
-    if (state.earnedOnly) bits.push('earned only');
-    if (state.spoiler) bits.push('spoilers hidden');
-    meta.textContent = bits.join(' · ') + '.';
-  }
+  const sources = data.sources ?? {};
+  const sourceItems = (trophy.sources ?? []).map((key) => {
+    const source = sources[key];
+    if (!source) return '';
+    const link = source.url
+      ? `<a href="${escapeHtml(source.url)}" target="_blank" rel="noopener">${escapeHtml(source.url)}</a>`
+      : '<span>Written for this guide</span>';
+    return `<li><strong>${escapeHtml(source.name)}</strong> — ${escapeHtml(source.covers)}<br>${link}</li>`;
+  }).join('');
+
+  const steps = (trophy.steps ?? []).map((step) => `<li>${escapeHtml(step)}</li>`).join('');
+  const target = targetText(trophy);
+  const missableNote = trophy.missable
+    ? `<div class="missable-note"><strong>Missable — plan around it.</strong> ` +
+      `The spots are spread over the whole state, so meditate at each spot the first time ` +
+      `you reach its area instead of leaving the set for after the story.</div>`
+    : '';
+
+  detailEl.innerHTML =
+    `<h3>${escapeHtml(trophy.name)}</h3>` +
+    `<p class="official">${gradeLabel(trophy.grade)} &middot; ${escapeHtml(kindLabel(trophy.kind))}` +
+    (target ? ` &middot; ${escapeHtml(target)}` : '') +
+    (trophy.missable ? ' &middot; Missable' : '') + `</p>` +
+    `<p class="official">Official: &ldquo;${escapeHtml(trophy.description)}&rdquo;</p>` +
+    `<h4>Guide</h4><p>${escapeHtml(trophy.guide)}</p>` +
+    (steps ? `<h4>Steps</h4><ol class="steps">${steps}</ol>` : '') +
+    missableNote +
+    `<h4>Sources</h4><ul class="source-list-detail">${sourceItems}</ul>` +
+    `<button class="earned-btn${earned ? ' earned' : ''}" type="button" data-earned-btn="${trophy.id}">` +
+    (earned ? '✓ Earned — click to unmark' : 'Mark as earned') +
+    `</button>` +
+    `<div class="detail-nav"><span></span><span></span></div>`;
+
+  const button = detailEl.querySelector('[data-earned-btn]');
+  if (button) button.addEventListener('click', () => callbacks.onToggleEarned(trophy.id));
 }
